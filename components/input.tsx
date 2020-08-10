@@ -43,6 +43,8 @@ export default function Input(): JSX.Element {
         )
       )
 
+      console.log(tree)
+
       tree.forEach((item) => {
         context.fillStyle = item.type === 'space' ? '#f009' : '#0af9'
         context.fillRect(0, item.index, $canvas.current.width, item.height)
@@ -93,7 +95,6 @@ function createTableTree(imageData: ImageData): any[] {
 
   const len: number = data.length / 4 / imageData.width
 
-  let currentMode: ImageMode = ImageMode.Space
   let startIndex = 0
 
   const tree = []
@@ -105,9 +106,11 @@ function createTableTree(imageData: ImageData): any[] {
       start + imageData.width * 4
     )
 
+    const isEmptyRow: boolean = isEmpty(rows)
+
     if (i === 0) {
       tree.push({
-        type: isEmpty(rows) ? ImageMode.Space : ImageMode.Image,
+        type: isEmptyRow ? ImageMode.Space : ImageMode.Image,
         width: imageData.width,
         index: i,
       })
@@ -117,49 +120,45 @@ function createTableTree(imageData: ImageData): any[] {
 
     const prevItem = tree[tree.length - 1]
 
-    if (isEmpty(rows)) {
-      if (prevItem.type === ImageMode.Space) {
-        if (i === len - 1) {
-          tree.push({
-            type: ImageMode.Space,
-            width: imageData.width,
-            height: i - startIndex,
-            index: i,
-          })
-        }
-        continue
+    if (i === len - 1) {
+      if (isEmptyRow && prevItem.type === ImageMode.Space) {
+        prevItem.height = i - startIndex
+      } else {
+        tree.push({
+          type: ImageMode.Image,
+          width: imageData.width,
+          height: i - startIndex,
+          index: i,
+        })
       }
 
-      tree.push({
-        type: ImageMode.Image,
-        width: imageData.width,
-        height: i - startIndex,
-        index: i,
-      })
-      currentMode = ImageMode.Space
-      startIndex = i
-    } else {
-      if (currentMode === ImageMode.Image) {
-        if (i === len - 1) {
-          tree.push({
-            type: ImageMode.Image,
-            width: imageData.width,
-            height: i - startIndex,
-            index: i,
-          })
-        }
+      continue
+    }
+
+    if (isEmptyRow) {
+      if (prevItem.type === ImageMode.Space) {
         continue
       }
 
       tree.push({
         type: ImageMode.Space,
         width: imageData.width,
-        height: i - startIndex,
         index: i,
       })
-      currentMode = ImageMode.Image
-      startIndex = i
+    } else {
+      if (prevItem.type === ImageMode.Image) {
+        continue
+      }
+
+      tree.push({
+        type: ImageMode.Image,
+        width: imageData.width,
+        index: i,
+      })
     }
+
+    prevItem.height = i - startIndex
+    startIndex = i
   }
 
   return tree
