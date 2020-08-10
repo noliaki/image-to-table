@@ -89,6 +89,14 @@ const ImageMode = {
 
 type ImageMode = typeof ImageMode[keyof typeof ImageMode]
 
+type Cell = {
+  x: number
+  y: number
+  width: number
+  height: number
+  type: ImageMode
+}
+
 function createTableTree(imageData: ImageData): any[] {
   console.log(imageData)
   const data: Uint8ClampedArray = imageData.data
