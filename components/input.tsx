@@ -45,9 +45,22 @@ export default function Input(): JSX.Element {
 
       console.log(tree)
 
-      tree.forEach((item) => {
-        context.fillStyle = item.type === 'space' ? '#f009' : '#0af9'
-        context.fillRect(0, item.index, $canvas.current.width, item.height)
+      tree.forEach((item: Cell): void => {
+        if (item.type === ImageType.Space) {
+          context.fillStyle = '#0af9'
+          context.fillRect(0, item.y, $canvas.current.width, item.height)
+        } else {
+          item.rows?.forEach((colCell) => {
+            context.fillStyle =
+              colCell.type === ImageType.Space ? '#0af9' : '#fa09'
+            context.fillRect(
+              colCell.x,
+              colCell.y,
+              colCell.width,
+              colCell.height
+            )
+          })
+        }
       })
     },
     [$canvas]
@@ -82,19 +95,20 @@ function loadImg(imgSrc: string): Promise<HTMLImageElement> {
   })
 }
 
-const ImageMode = {
+const ImageType = {
   Space: 'space',
   Image: 'image',
 } as const
 
-type ImageMode = typeof ImageMode[keyof typeof ImageMode]
+type ImageType = typeof ImageType[keyof typeof ImageType]
 
 type Cell = {
   x: number
   y: number
   width: number
   height: number
-  type: ImageMode
+  type: ImageType
+  rows?: Cell[]
 }
 
 function createTableTree(imageData: ImageData): any[] {
@@ -105,7 +119,7 @@ function createTableTree(imageData: ImageData): any[] {
 
   let startIndex = 0
 
-  const tree = []
+  const tree: Cell[] = []
 
   for (let i = 0; i < len; i++) {
     const start: number = i * imageData.width * 4
@@ -118,9 +132,11 @@ function createTableTree(imageData: ImageData): any[] {
 
     if (i === 0) {
       tree.push({
-        type: isEmptyRow ? ImageMode.Space : ImageMode.Image,
+        type: isEmptyRow ? ImageType.Space : ImageType.Image,
         width: imageData.width,
-        index: i,
+        height: 0,
+        x: 0,
+        y: i,
       })
 
       continue
@@ -129,14 +145,15 @@ function createTableTree(imageData: ImageData): any[] {
     const prevItem = tree[tree.length - 1]
 
     if (i === len - 1) {
-      if (isEmptyRow && prevItem.type === ImageMode.Space) {
+      if (isEmptyRow && prevItem.type === ImageType.Space) {
         prevItem.height = i - startIndex
       } else {
         tree.push({
-          type: ImageMode.Image,
+          type: ImageType.Image,
           width: imageData.width,
           height: i - startIndex,
-          index: i,
+          x: 0,
+          y: i,
         })
       }
 
@@ -144,35 +161,40 @@ function createTableTree(imageData: ImageData): any[] {
     }
 
     if (isEmptyRow) {
-      if (prevItem.type === ImageMode.Space) {
+      if (prevItem.type === ImageType.Space) {
         continue
       }
 
       tree.push({
-        type: ImageMode.Space,
+        type: ImageType.Space,
         width: imageData.width,
-        index: i,
+        height: 0,
+        x: 0,
+        y: i,
       })
     } else {
-      if (prevItem.type === ImageMode.Image) {
+      if (prevItem.type === ImageType.Image) {
         continue
       }
 
       tree.push({
-        type: ImageMode.Image,
+        type: ImageType.Image,
         width: imageData.width,
-        index: i,
+        height: 0,
+        x: 0,
+        y: i,
       })
     }
 
     prevItem.height = i - startIndex
+    prevItem.rows = createRow(prevItem, imageData)
     startIndex = i
   }
 
   return tree
 }
 
-function isEmpty(rows: Uint8ClampedArray): boolean {
+function isEmpty(rows: Uint8ClampedArray | number[]): boolean {
   for (let j = 0; j < rows.length; j += 4) {
     if (
       rows[j + 0] !== 255 ||
@@ -185,4 +207,100 @@ function isEmpty(rows: Uint8ClampedArray): boolean {
   }
 
   return true
+}
+
+function createRow(item: Cell, imageData: ImageData): Cell[] {
+  const start = item.y * 4 * imageData.width
+  const end = start + item.height * 4 * imageData.width
+  const blockData: Uint8ClampedArray = imageData.data.slice(start, end)
+
+  const rowData: Cell[] = []
+  let startIndex = 0
+
+  for (let i = 0; i < imageData.width; i++) {
+    const cols = []
+
+    for (let j = 0; j < item.height; j++) {
+      const sIndex = imageData.width * 4 * j
+      cols.push(blockData[sIndex + 0])
+      cols.push(blockData[sIndex + 1])
+      cols.push(blockData[sIndex + 2])
+      cols.push(blockData[sIndex + 3])
+    }
+
+    const isEmptyRow: boolean = isEmpty(cols)
+
+    if (i === 0) {
+      rowData.push({
+        type: isEmptyRow ? ImageType.Space : ImageType.Image,
+        width: 0,
+        height: item.height,
+        x: i,
+        y: item.y,
+      })
+
+      continue
+    }
+
+    const prevItem = rowData[rowData.length - 1]
+
+    if (i === imageData.width - 1) {
+      if (isEmptyRow) {
+        if (prevItem.type === ImageType.Space) {
+          prevItem.width = i - startIndex
+        } else {
+          rowData.push({
+            type: ImageType.Image,
+            width: i - startIndex,
+            height: item.height,
+            x: i,
+            y: item.y,
+          })
+        }
+      } else {
+        if (prevItem.type === ImageType.Image) {
+          prevItem.width = i - startIndex
+        } else {
+          rowData.push({
+            type: ImageType.Image,
+            width: i - startIndex,
+            height: item.height,
+            x: i,
+            y: item.y,
+          })
+        }
+      }
+    }
+
+    if (isEmptyRow) {
+      if (prevItem.type === ImageType.Space) {
+        continue
+      }
+
+      rowData.push({
+        type: ImageType.Space,
+        width: 0,
+        height: item.height,
+        x: i,
+        y: item.y,
+      })
+    } else {
+      if (prevItem.type === ImageType.Image) {
+        continue
+      }
+
+      rowData.push({
+        type: ImageType.Image,
+        width: 0,
+        height: item.height,
+        x: i,
+        y: item.y,
+      })
+    }
+
+    prevItem.width = i - startIndex
+    startIndex = i
+  }
+
+  return rowData
 }
