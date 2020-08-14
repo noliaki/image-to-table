@@ -1,6 +1,29 @@
 import React, { useCallback, useRef, useState } from 'react'
+import ReactDOMServer from 'react-dom/server'
+
+const defaultStyle: React.CSSProperties = {
+  margin: 0,
+  padding: 0,
+  border: 'none',
+}
+
+const tableStyle: React.CSSProperties = Object.assign({}, defaultStyle, {
+  borderSpacing: 0,
+  borderCollapse: 'collapse',
+})
+
+const tdStyle: React.CSSProperties = Object.assign({}, defaultStyle)
+
+const imgStyle: React.CSSProperties = Object.assign({}, defaultStyle, {
+  lineHeight: 0,
+  display: 'block',
+})
+
+const spacerGifSrc =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
 
 export default function Input(): JSX.Element {
+  const [tableEl, setTableEl] = useState(null)
   const reader: FileReader = new window.FileReader()
 
   const $canvas: React.MutableRefObject<HTMLCanvasElement> = useRef<
@@ -46,13 +69,16 @@ export default function Input(): JSX.Element {
       console.log(tree)
 
       tree.forEach((item: Cell): void => {
+        // context.fillStyle = item.type === ImageType.Space ? '#0af9' : '#fa09'
+        // context.fillRect(0, item.y, item.width, item.height)
+
         if (item.type === ImageType.Space) {
           context.fillStyle = '#0af9'
-          context.fillRect(0, item.y, $canvas.current.width, item.height)
+          context.fillRect(0, item.y, item.width, item.height)
         } else {
           item.rows?.forEach((colCell) => {
             context.fillStyle =
-              colCell.type === ImageType.Space ? '#0af9' : '#fa09'
+              colCell.type === ImageType.Space ? '#0ff9' : '#fa09'
             context.fillRect(
               colCell.x,
               colCell.y,
@@ -62,6 +88,107 @@ export default function Input(): JSX.Element {
           })
         }
       })
+
+      setTableEl(createTable(tree, img))
+    },
+    [$canvas]
+  )
+
+  const createTable = useCallback(
+    (tree: Cell[], img: HTMLImageElement): JSX.Element => {
+      return (
+        <table
+          style={Object.assign({}, tableStyle, {
+            width: img.naturalWidth,
+            height: img.naturalHeight,
+          })}
+        >
+          <tbody>
+            {tree.map((item: Cell, index: number) => {
+              if (item.type === ImageType.Space) {
+                return (
+                  <tr key={'image-' + index}>
+                    <td width={item.width} height={item.height} style={tdStyle}>
+                      <img
+                        src={spacerGifSrc}
+                        alt=""
+                        style={Object.assign({}, imgStyle, {
+                          width: item.width,
+                          height: item.height,
+                        })}
+                      />
+                    </td>
+                  </tr>
+                )
+              }
+
+              return (
+                <tr key={'image-' + index}>
+                  <td style={tdStyle}>
+                    <table
+                      style={Object.assign({}, tableStyle, {
+                        width: item.width,
+                        height: item.height,
+                      })}
+                    >
+                      <tbody>
+                        <tr>
+                          {item.rows?.map(
+                            (cell: Cell, colIndex: number): JSX.Element => {
+                              const canvas = document.createElement('canvas')
+                              const context = canvas.getContext('2d')
+
+                              canvas.width = cell.width
+                              canvas.height = cell.height
+
+                              context.drawImage(
+                                img,
+                                cell.x,
+                                cell.y,
+                                cell.width,
+                                cell.height,
+                                0,
+                                0,
+                                cell.width,
+                                cell.height
+                              )
+
+                              return (
+                                <td
+                                  key={
+                                    'image-' + index + 'col-image-' + colIndex
+                                  }
+                                  width={cell.width}
+                                  height={cell.height}
+                                  style={Object.assign({}, tdStyle, {
+                                    width: cell.width,
+                                    height: cell.height,
+                                  })}
+                                >
+                                  <img
+                                    src={canvas.toDataURL()}
+                                    width={cell.width}
+                                    height={cell.height}
+                                    style={Object.assign({}, imgStyle, {
+                                      width: cell.width,
+                                      height: cell.height,
+                                    })}
+                                    alt=""
+                                  />
+                                </td>
+                              )
+                            }
+                          )}
+                        </tr>
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )
     },
     [$canvas]
   )
@@ -77,6 +204,10 @@ export default function Input(): JSX.Element {
         }
       />
       <canvas ref={$canvas}></canvas>
+      {tableEl}
+      <pre>
+        <code>{ReactDOMServer.renderToStaticMarkup(tableEl)}</code>
+      </pre>
     </div>
   )
 }
@@ -147,6 +278,7 @@ function createTableTree(imageData: ImageData): any[] {
     if (i === len - 1) {
       if (isEmptyRow && prevItem.type === ImageType.Space) {
         prevItem.height = i - startIndex
+        prevItem.rows = createRow(prevItem, imageData)
       } else {
         tree.push({
           type: ImageType.Image,
@@ -221,7 +353,7 @@ function createRow(item: Cell, imageData: ImageData): Cell[] {
     const cols = []
 
     for (let j = 0; j < item.height; j++) {
-      const sIndex = imageData.width * 4 * j
+      const sIndex = imageData.width * 4 * j + i * 4
       cols.push(blockData[sIndex + 0])
       cols.push(blockData[sIndex + 1])
       cols.push(blockData[sIndex + 2])
@@ -247,11 +379,11 @@ function createRow(item: Cell, imageData: ImageData): Cell[] {
     if (i === imageData.width - 1) {
       if (isEmptyRow) {
         if (prevItem.type === ImageType.Space) {
-          prevItem.width = i - startIndex
+          prevItem.width = i - startIndex + 1
         } else {
           rowData.push({
-            type: ImageType.Image,
-            width: i - startIndex,
+            type: ImageType.Space,
+            width: i - startIndex + 1,
             height: item.height,
             x: i,
             y: item.y,
@@ -259,17 +391,19 @@ function createRow(item: Cell, imageData: ImageData): Cell[] {
         }
       } else {
         if (prevItem.type === ImageType.Image) {
-          prevItem.width = i - startIndex
+          prevItem.width = i - startIndex + 1
         } else {
           rowData.push({
             type: ImageType.Image,
-            width: i - startIndex,
+            width: i - startIndex + 1,
             height: item.height,
             x: i,
             y: item.y,
           })
         }
       }
+
+      continue
     }
 
     if (isEmptyRow) {
