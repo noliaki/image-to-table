@@ -1,5 +1,16 @@
 import React, { useCallback, useRef, useState } from 'react'
 import ReactDOMServer from 'react-dom/server'
+import { html } from 'js-beautify'
+
+const beautifyOptions: HTMLBeautifyOptions = {
+  indent_size: 2,
+  end_with_newline: true,
+  preserve_newlines: false,
+  max_preserve_newlines: 0,
+  wrap_line_length: 0,
+  wrap_attributes_indent_size: 0,
+  unformatted: ['b', 'em'],
+}
 
 const defaultStyle: React.CSSProperties = {
   margin: 0,
@@ -53,8 +64,6 @@ export default function Input(): JSX.Element {
       const context: CanvasRenderingContext2D = getContext()
       $canvas.current.width = img.naturalWidth
       $canvas.current.height = img.naturalHeight
-      context.fillStyle = '#f00'
-      context.fillRect(0, 0, $canvas.current.width, $canvas.current.height)
       context.drawImage(img, 0, 0)
 
       const tree = createTableTree(
@@ -69,16 +78,13 @@ export default function Input(): JSX.Element {
       console.log(tree)
 
       tree.forEach((item: Cell): void => {
-        // context.fillStyle = item.type === ImageType.Space ? '#0af9' : '#fa09'
-        // context.fillRect(0, item.y, item.width, item.height)
-
         if (item.type === ImageType.Space) {
           context.fillStyle = '#0af9'
           context.fillRect(0, item.y, item.width, item.height)
         } else {
           item.rows?.forEach((colCell) => {
             context.fillStyle =
-              colCell.type === ImageType.Space ? '#0ff9' : '#fa09'
+              colCell.type === ImageType.Space ? '#0af9' : '#fa09'
             context.fillRect(
               colCell.x,
               colCell.y,
@@ -103,90 +109,7 @@ export default function Input(): JSX.Element {
             height: img.naturalHeight,
           })}
         >
-          <tbody>
-            {tree.map((item: Cell, index: number) => {
-              if (item.type === ImageType.Space) {
-                return (
-                  <tr key={'image-' + index}>
-                    <td width={item.width} height={item.height} style={tdStyle}>
-                      <img
-                        src={spacerGifSrc}
-                        alt=""
-                        style={Object.assign({}, imgStyle, {
-                          width: item.width,
-                          height: item.height,
-                        })}
-                      />
-                    </td>
-                  </tr>
-                )
-              }
-
-              return (
-                <tr key={'image-' + index}>
-                  <td style={tdStyle}>
-                    <table
-                      style={Object.assign({}, tableStyle, {
-                        width: item.width,
-                        height: item.height,
-                      })}
-                    >
-                      <tbody>
-                        <tr>
-                          {item.rows?.map(
-                            (cell: Cell, colIndex: number): JSX.Element => {
-                              const canvas = document.createElement('canvas')
-                              const context = canvas.getContext('2d')
-
-                              canvas.width = cell.width
-                              canvas.height = cell.height
-
-                              context.drawImage(
-                                img,
-                                cell.x,
-                                cell.y,
-                                cell.width,
-                                cell.height,
-                                0,
-                                0,
-                                cell.width,
-                                cell.height
-                              )
-
-                              return (
-                                <td
-                                  key={
-                                    'image-' + index + 'col-image-' + colIndex
-                                  }
-                                  width={cell.width}
-                                  height={cell.height}
-                                  style={Object.assign({}, tdStyle, {
-                                    width: cell.width,
-                                    height: cell.height,
-                                  })}
-                                >
-                                  <img
-                                    src={canvas.toDataURL()}
-                                    width={cell.width}
-                                    height={cell.height}
-                                    style={Object.assign({}, imgStyle, {
-                                      width: cell.width,
-                                      height: cell.height,
-                                    })}
-                                    alt=""
-                                  />
-                                </td>
-                              )
-                            }
-                          )}
-                        </tr>
-                      </tbody>
-                    </table>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
+          <tbody>{createRows(tree, img)}</tbody>
         </table>
       )
     },
@@ -195,19 +118,22 @@ export default function Input(): JSX.Element {
 
   reader.addEventListener('load', onLoad)
 
+  const code: string = html(
+    ReactDOMServer.renderToStaticMarkup(tableEl),
+    beautifyOptions
+  )
+
   return (
     <div className="container">
-      <input
-        type="file"
-        onChange={(event: React.ChangeEvent<HTMLInputElement>): void =>
-          onChange(event)
-        }
-      />
+      <input type="file" onChange={onChange} />
       <canvas ref={$canvas}></canvas>
       {tableEl}
       <pre>
-        <code>{ReactDOMServer.renderToStaticMarkup(tableEl)}</code>
+        <code>{code}</code>
       </pre>
+      <div>
+        <textarea value={code} readOnly></textarea>
+      </div>
     </div>
   )
 }
@@ -437,4 +363,119 @@ function createRow(item: Cell, imageData: ImageData): Cell[] {
   }
 
   return rowData
+}
+
+function createRows(rows: Cell[], img: HTMLImageElement): JSX.Element[] {
+  return rows.map(
+    (cell: Cell, index: number): JSX.Element => {
+      const key = `row-${index}`
+
+      if (cell.type === ImageType.Space) {
+        return (
+          <tr key={key}>
+            <td width={cell.width} height={cell.height} style={tdStyle}>
+              <img
+                src={spacerGifSrc}
+                alt=""
+                style={Object.assign({}, imgStyle, {
+                  width: cell.width,
+                  height: cell.height,
+                })}
+              />
+            </td>
+          </tr>
+        )
+      }
+
+      return (
+        <tr key={key}>
+          <td>
+            <table>
+              <tbody>
+                <tr>{createCols(cell.rows, img, index)}</tr>
+              </tbody>
+            </table>
+          </td>
+        </tr>
+      )
+    }
+  )
+}
+
+function createCols(
+  cols: Cell[],
+  img: HTMLImageElement,
+  rowIndex: number
+): JSX.Element[] {
+  return cols.map(
+    (cell: Cell, index: number): JSX.Element => {
+      const key = `row-${rowIndex}:col-${index}`
+
+      if (cell.type === ImageType.Space) {
+        return (
+          <td
+            key={key}
+            width={cell.width}
+            height={cell.height}
+            style={Object.assign({}, tdStyle, {
+              width: cell.width,
+              height: cell.height,
+            })}
+          >
+            <img
+              src={spacerGifSrc}
+              width={cell.width}
+              height={cell.height}
+              style={Object.assign({}, imgStyle, {
+                width: cell.width,
+                height: cell.height,
+              })}
+              alt=""
+            />
+          </td>
+        )
+      }
+
+      const canvas = document.createElement('canvas')
+      const context = canvas.getContext('2d')
+
+      canvas.width = cell.width
+      canvas.height = cell.height
+
+      context.drawImage(
+        img,
+        cell.x,
+        cell.y,
+        cell.width,
+        cell.height,
+        0,
+        0,
+        cell.width,
+        cell.height
+      )
+
+      return (
+        <td
+          key={key}
+          width={cell.width}
+          height={cell.height}
+          style={Object.assign({}, tdStyle, {
+            width: cell.width,
+            height: cell.height,
+          })}
+        >
+          <img
+            src={canvas.toDataURL()}
+            width={cell.width}
+            height={cell.height}
+            style={Object.assign({}, imgStyle, {
+              width: cell.width,
+              height: cell.height,
+            })}
+            alt=""
+          />
+        </td>
+      )
+    }
+  )
 }
