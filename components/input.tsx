@@ -2,6 +2,22 @@ import React, { useCallback, useRef, useState } from 'react'
 import ReactDOMServer from 'react-dom/server'
 import { html } from 'js-beautify'
 
+const ImageType = {
+  Space: 'space',
+  Image: 'image',
+} as const
+
+type ImageType = typeof ImageType[keyof typeof ImageType]
+
+type Cell = {
+  x: number
+  y: number
+  width: number
+  height: number
+  type: ImageType
+  cols?: Cell[]
+}
+
 const beautifyOptions: HTMLBeautifyOptions = {
   indent_size: 2,
   end_with_newline: true,
@@ -82,7 +98,7 @@ export default function Input(): JSX.Element {
           context.fillStyle = '#0af9'
           context.fillRect(0, item.y, item.width, item.height)
         } else {
-          item.rows?.forEach((colCell) => {
+          item.cols?.forEach((colCell) => {
             context.fillStyle =
               colCell.type === ImageType.Space ? '#0af9' : '#fa09'
             context.fillRect(
@@ -106,7 +122,6 @@ export default function Input(): JSX.Element {
         <table
           style={Object.assign({}, tableStyle, {
             width: img.naturalWidth,
-            height: img.naturalHeight,
           })}
         >
           <tbody>{createRows(tree, img)}</tbody>
@@ -125,14 +140,43 @@ export default function Input(): JSX.Element {
 
   return (
     <div className="container">
-      <input type="file" onChange={onChange} />
+      <div
+        style={{
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: 300,
+          backgroundColor: 'rgba(0, 200, 255, 0.5)',
+        }}
+      >
+        <span>Drag &amp; Drop Image file</span>
+        <input
+          type="file"
+          onChange={onChange}
+          style={{
+            opacity: 0,
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            bottom: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+          }}
+        />
+      </div>
       <canvas ref={$canvas}></canvas>
-      {tableEl}
-      <pre>
-        <code>{code}</code>
-      </pre>
-      <div>
-        <textarea value={code} readOnly></textarea>
+      <div>{tableEl}</div>
+      <div
+        style={{
+          backgroundColor: '#f0f0f0',
+          padding: '1.5em',
+        }}
+      >
+        <pre>
+          <code>{code}</code>
+        </pre>
       </div>
     </div>
   )
@@ -150,22 +194,6 @@ function loadImg(imgSrc: string): Promise<HTMLImageElement> {
 
     img.src = imgSrc
   })
-}
-
-const ImageType = {
-  Space: 'space',
-  Image: 'image',
-} as const
-
-type ImageType = typeof ImageType[keyof typeof ImageType]
-
-type Cell = {
-  x: number
-  y: number
-  width: number
-  height: number
-  type: ImageType
-  rows?: Cell[]
 }
 
 function createTableTree(imageData: ImageData): any[] {
@@ -204,7 +232,7 @@ function createTableTree(imageData: ImageData): any[] {
     if (i === len - 1) {
       if (isEmptyRow && prevItem.type === ImageType.Space) {
         prevItem.height = i - startIndex
-        prevItem.rows = createRow(prevItem, imageData)
+        prevItem.cols = createRow(prevItem, imageData)
       } else {
         tree.push({
           type: ImageType.Image,
@@ -245,7 +273,7 @@ function createTableTree(imageData: ImageData): any[] {
     }
 
     prevItem.height = i - startIndex
-    prevItem.rows = createRow(prevItem, imageData)
+    prevItem.cols = createRow(prevItem, imageData)
     startIndex = i
   }
 
@@ -253,18 +281,9 @@ function createTableTree(imageData: ImageData): any[] {
 }
 
 function isEmpty(rows: Uint8ClampedArray | number[]): boolean {
-  for (let j = 0; j < rows.length; j += 4) {
-    if (
-      rows[j + 0] !== 255 ||
-      rows[j + 1] !== 255 ||
-      rows[j + 2] !== 255 ||
-      rows[j + 3] !== 255
-    ) {
-      return false
-    }
-  }
-
-  return true
+  return rows
+    .filter((_color: number, index: number): boolean => (index + 1) % 4 === 0)
+    .every((opacity: number): boolean => opacity === 0)
 }
 
 function createRow(item: Cell, imageData: ImageData): Cell[] {
@@ -389,10 +408,19 @@ function createRows(rows: Cell[], img: HTMLImageElement): JSX.Element[] {
 
       return (
         <tr key={key}>
-          <td>
-            <table>
+          <td
+            style={Object.assign({}, tdStyle, {
+              width: cell.width,
+              height: cell.height,
+            })}
+          >
+            <table
+              style={Object.assign({}, tableStyle, {
+                width: cell.width,
+              })}
+            >
               <tbody>
-                <tr>{createCols(cell.rows, img, index)}</tr>
+                <tr>{createCols(cell.cols, img, index)}</tr>
               </tbody>
             </table>
           </td>
